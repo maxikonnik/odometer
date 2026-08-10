@@ -13,7 +13,6 @@ public final class AttentionService {
 
     @ObservationIgnored private let store: AttentionStore
     @ObservationIgnored private var source: DispatchSourceFileSystemObject?
-    @ObservationIgnored private var descriptor: CInt = -1
     @ObservationIgnored private var announced: Set<String> = []
 
     public init(store: AttentionStore) {
@@ -21,10 +20,12 @@ public final class AttentionService {
     }
 
     public func start() {
+        guard source == nil else { return }
+
         store.ensureDirectoryExists()
         refresh(now: Date())
 
-        descriptor = open(store.directory.path, O_EVTONLY)
+        let descriptor = open(store.directory.path, O_EVTONLY)
         guard descriptor >= 0 else { return }
 
         let source = DispatchSource.makeFileSystemObjectSource(
@@ -35,11 +36,7 @@ public final class AttentionService {
         source.setEventHandler { [weak self] in
             self?.refresh(now: Date())
         }
-        source.setCancelHandler { [weak self] in
-            guard let self, self.descriptor >= 0 else { return }
-            close(self.descriptor)
-            self.descriptor = -1
-        }
+        source.setCancelHandler { close(descriptor) }
         source.resume()
         self.source = source
     }
