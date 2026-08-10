@@ -15,7 +15,7 @@ public final class Settings {
         notificationsEnabled = defaults.object(forKey: Key.notificationsEnabled) as? Bool ?? true
 
         let stored = defaults.array(forKey: Key.thresholds) as? [Double] ?? []
-        thresholds = stored.isEmpty ? [80, 95] : Self.normalize(stored)
+        storedThresholds = stored.isEmpty ? [80, 95] : Self.normalize(stored)
 
         menuBarLimit = (defaults.string(forKey: Key.menuBarLimit)
             .flatMap(LimitKind.init(rawValue:))) ?? .session
@@ -37,12 +37,25 @@ public final class Settings {
         didSet { defaults.set(notificationsEnabled, forKey: Key.notificationsEnabled) }
     }
 
+    /// Assigning to a property inside its own `didSet` is safe on a plain stored
+    /// property but not here: `@Observable` rewrites stored properties into
+    /// computed ones, so the assignment re-enters the setter and recurses until
+    /// the stack overflows. Normalizing inside an explicit setter avoids that
+    /// while keeping the property observable through the generated accessors.
     public var thresholds: [Double] {
-        didSet {
-            thresholds = Self.normalize(thresholds)
-            defaults.set(thresholds, forKey: Key.thresholds)
+        get {
+            access(keyPath: \.thresholds)
+            return storedThresholds
+        }
+        set {
+            withMutation(keyPath: \.thresholds) {
+                storedThresholds = Self.normalize(newValue)
+            }
+            defaults.set(storedThresholds, forKey: Key.thresholds)
         }
     }
+
+    @ObservationIgnored private var storedThresholds: [Double]
 
     public var menuBarLimit: LimitKind {
         didSet { defaults.set(menuBarLimit.rawValue, forKey: Key.menuBarLimit) }
