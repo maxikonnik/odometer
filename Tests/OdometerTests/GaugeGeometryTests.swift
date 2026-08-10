@@ -1,33 +1,33 @@
-import XCTest
+import Testing
 @testable import OdometerCore
 
-final class GaugeGeometryTests: XCTestCase {
-    func testNeedleStartsAtLowerLeft() {
-        XCTAssertEqual(GaugeGeometry.needleDegrees(percent: 0), 150, accuracy: 0.0001)
+@Suite struct GaugeGeometryTests {
+    @Test func needleStartsAtLowerLeft() {
+        #expect(abs(GaugeGeometry.needleDegrees(percent: 0) - 150) < 0.0001)
     }
 
-    func testNeedlePointsStraightUpAtHalf() {
-        XCTAssertEqual(GaugeGeometry.needleDegrees(percent: 50), 270, accuracy: 0.0001)
+    @Test func needlePointsStraightUpAtHalf() {
+        #expect(abs(GaugeGeometry.needleDegrees(percent: 50) - 270) < 0.0001)
     }
 
-    func testNeedleEndsAtLowerRight() {
-        XCTAssertEqual(GaugeGeometry.needleDegrees(percent: 100), 390, accuracy: 0.0001)
+    @Test func needleEndsAtLowerRight() {
+        #expect(abs(GaugeGeometry.needleDegrees(percent: 100) - 390) < 0.0001)
     }
 
-    func testNeedleClampsBelowZero() {
-        XCTAssertEqual(GaugeGeometry.needleDegrees(percent: -25), 150, accuracy: 0.0001)
+    @Test func needleClampsBelowZero() {
+        #expect(abs(GaugeGeometry.needleDegrees(percent: -25) - 150) < 0.0001)
     }
 
-    func testNeedleClampsAboveOneHundred() {
-        XCTAssertEqual(GaugeGeometry.needleDegrees(percent: 150), 390, accuracy: 0.0001)
+    @Test func needleClampsAboveOneHundred() {
+        #expect(abs(GaugeGeometry.needleDegrees(percent: 150) - 390) < 0.0001)
     }
 
-    func testZoneBoundaries() {
-        XCTAssertEqual(GaugeGeometry.zone(percent: 0), .normal)
-        XCTAssertEqual(GaugeGeometry.zone(percent: 59.9), .normal)
-        XCTAssertEqual(GaugeGeometry.zone(percent: 60), .warning)
-        XCTAssertEqual(GaugeGeometry.zone(percent: 79.9), .warning)
-        XCTAssertEqual(GaugeGeometry.zone(percent: 80), .critical)
-        XCTAssertEqual(GaugeGeometry.zone(percent: 100), .critical)
+    @Test func zoneBoundaries() {
+        #expect(GaugeGeometry.zone(percent: 0) == .normal)
+        #expect(GaugeGeometry.zone(percent: 59.9) == .normal)
+        #expect(GaugeGeometry.zone(percent: 60) == .warning)
+        #expect(GaugeGeometry.zone(percent: 79.9) == .warning)
+        #expect(GaugeGeometry.zone(percent: 80) == .critical)
+        #expect(GaugeGeometry.zone(percent: 100) == .critical)
     }
 }
