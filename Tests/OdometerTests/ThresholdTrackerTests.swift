@@ -1,0 +1,55 @@
+import Foundation
+import Testing
+@testable import OdometerCore
+
+@Suite struct ThresholdTrackerTests {
+    private let reset = Date(timeIntervalSince1970: 1_786_400_000)
+
+    private func limit(_ percent: Double, resetsAt: Date? = nil,
+                       kind: LimitKind = .session) -> UsageLimit {
+        UsageLimit(kind: kind, label: "L", percent: percent,
+                   resetsAt: resetsAt ?? reset, isActive: true)
+    }
+
+    @Test func noCrossingBelowFirstThreshold() {
+        var tracker = ThresholdTracker(thresholds: [80, 95])
+        #expect(tracker.newlyCrossed(limit(50)) == [])
+    }
+
+    @Test func crossingFiresOnce() {
+        var tracker = ThresholdTracker(thresholds: [80, 95])
+        #expect(tracker.newlyCrossed(limit(81)) == [80])
+        #expect(tracker.newlyCrossed(limit(85)) == [])
+    }
+
+    @Test func jumpPastBothThresholdsFiresBoth() {
+        var tracker = ThresholdTracker(thresholds: [80, 95])
+        #expect(tracker.newlyCrossed(limit(97)) == [80, 95])
+    }
+
+    @Test func secondThresholdFiresLater() {
+        var tracker = ThresholdTracker(thresholds: [80, 95])
+        #expect(tracker.newlyCrossed(limit(82)) == [80])
+        #expect(tracker.newlyCrossed(limit(96)) == [95])
+    }
+
+    @Test func windowChangeRearmsThresholds() {
+        var tracker = ThresholdTracker(thresholds: [80, 95])
+        _ = tracker.newlyCrossed(limit(90))
+        let next = reset.addingTimeInterval(18_000)
+        #expect(tracker.newlyCrossed(limit(90, resetsAt: next)) == [80])
+    }
+
+    @Test func limitsAreTrackedIndependently() {
+        var tracker = ThresholdTracker(thresholds: [80])
+        #expect(tracker.newlyCrossed(limit(90, kind: .session)) == [80])
+        #expect(tracker.newlyCrossed(limit(90, kind: .weeklyAll)) == [80])
+    }
+
+    @Test func changingThresholdsRearms() {
+        var tracker = ThresholdTracker(thresholds: [80])
+        _ = tracker.newlyCrossed(limit(90))
+        tracker.thresholds = [50, 80]
+        #expect(tracker.newlyCrossed(limit(90)) == [50, 80])
+    }
+}
