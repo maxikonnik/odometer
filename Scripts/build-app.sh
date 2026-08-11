@@ -34,11 +34,17 @@ cat > "$CONTENTS/Info.plist" <<PLIST
     <key>CFBundleVersion</key><string>$VERSION</string>
     <key>LSMinimumSystemVersion</key><string>14.0</string>
     <key>LSUIElement</key><true/>
+    <key>CFBundleIconFile</key><string>AppIcon</string>
     <key>NSAppleEventsUsageDescription</key><string>Odometer выводит вперёд окно терминала, который ждёт вашего решения.</string>
     <key>NSHumanReadableCopyright</key><string>Odometer</string>
 </dict>
 </plist>
 PLIST
+
+# Icon must be inside the bundle before it is signed, or the signature breaks.
+if [ -f "$ROOT/Resources/AppIcon.icns" ]; then
+  cp "$ROOT/Resources/AppIcon.icns" "$CONTENTS/Resources/AppIcon.icns"
+fi
 
 # Ad-hoc signature: required for local notifications and Keychain prompts.
 codesign --force --deep --sign - "$APP"

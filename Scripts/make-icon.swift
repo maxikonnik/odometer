@@ -429,8 +429,12 @@ func drawVariant6(_ ctx: CGContext, seed: UInt64) {
 /// than the biggest petal ever seen.
 let v7MaxBallDiameter: CGFloat = 42.742318447238375
 
-func drawVariant7(_ ctx: CGContext, seed: UInt64) {
-    drawPlate(ctx)
+/// The dial face, zone arc, ticks, and the seeded organic burst (petals +
+/// needle + hub) from V7, factored out of `drawVariant7` so V8 can render
+/// the exact same construction inside a scaled coordinate space. Does NOT
+/// draw the plate - callers are responsible for that, before any scaling is
+/// applied, so the plate's size and corner radius are never affected.
+func drawGaugeAndBurstV7(_ ctx: CGContext, seed: UInt64) {
     drawDialFace(ctx)
     drawZoneArc(ctx)
     drawTicks(ctx)
@@ -469,6 +473,38 @@ func drawVariant7(_ ctx: CGContext, seed: UInt64) {
     drawPlainHub(ctx, radius: 24)
 }
 
+func drawVariant7(_ ctx: CGContext, seed: UInt64) {
+    drawPlate(ctx)
+    drawGaugeAndBurstV7(ctx, seed: seed)
+}
+
+/// Variant 8 - "V7, agrandi": identical construction to V7 (same seed, same
+/// 0.30-1.00 ball size jitter, same +/-30% distance jitter, same
+/// widen-toward-tip taper, same palette, same exempt needle at 72%) but with
+/// the whole gauge - dial face, zone arc, ticks, burst, and needle - scaled
+/// up uniformly around CENTER so it sits closer to the plate's edge. The
+/// plate itself is drawn first, at its normal size and corner radius, and
+/// only *then* is the coordinate space scaled for the gauge, so the plate
+/// geometry is untouched. Scaling the coordinate space (rather than
+/// recomputing each radius/width constant by hand) guarantees every
+/// proportion between dial, arc, ticks, petals and needle is preserved
+/// exactly, and stroke widths scale along with everything else for free.
+let V8_DIAL_DIAMETER: CGFloat = 740
+let V8_SCALE: CGFloat = V8_DIAL_DIAMETER / DIAL_DIAMETER
+
+func drawVariant8(_ ctx: CGContext, seed: UInt64) {
+    drawPlate(ctx)
+
+    ctx.saveGState()
+    ctx.translateBy(x: CENTER.x, y: CENTER.y)
+    ctx.scaleBy(x: V8_SCALE, y: V8_SCALE)
+    ctx.translateBy(x: -CENTER.x, y: -CENTER.y)
+
+    drawGaugeAndBurstV7(ctx, seed: seed)
+
+    ctx.restoreGState()
+}
+
 func drawVariant(_ key: String, _ ctx: CGContext, seed: UInt64 = 0) {
     if let spec = ballSpecs[key] {
         drawVariant5(ctx, spec: spec)
@@ -481,6 +517,7 @@ func drawVariant(_ key: String, _ ctx: CGContext, seed: UInt64 = 0) {
     case "4": drawVariant4(ctx)
     case "6": drawVariant6(ctx, seed: seed)
     case "7": drawVariant7(ctx, seed: seed)
+    case "8": drawVariant8(ctx, seed: seed)
     default: fatalError("unknown variant \(key)")
     }
 }
@@ -530,8 +567,8 @@ func savePNG(_ image: CGImage, to path: String) {
 
 // MARK: - Entry point
 
-let validVariants: Set<String> = ["1", "2", "3", "4", "5a", "5b", "5c", "6", "7"]
-let seededVariants: Set<String> = ["6", "7"]
+let validVariants: Set<String> = ["1", "2", "3", "4", "5a", "5b", "5c", "6", "7", "8"]
+let seededVariants: Set<String> = ["6", "7", "8"]
 
 let args = CommandLine.arguments
 func usage() -> Never {
