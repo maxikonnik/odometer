@@ -10,6 +10,7 @@ public final class OdometerAppDelegate: NSObject, NSApplicationDelegate {
     private var usageTimer: Timer?
     private var logsTimer: Timer?
     private var blinkTimer: Timer?
+    private var soundTimer: Timer?
     private var blinkOn = true
     private var wasBlinking = false
 
@@ -71,6 +72,7 @@ public final class OdometerAppDelegate: NSObject, NSApplicationDelegate {
         usageTimer?.invalidate()
         logsTimer?.invalidate()
         blinkTimer?.invalidate()
+        soundTimer?.invalidate()
     }
 
     private func buildStatusItem() {
@@ -119,6 +121,22 @@ public final class OdometerAppDelegate: NSObject, NSApplicationDelegate {
         if isBlinking != wasBlinking {
             wasBlinking = isBlinking
             redraw()
+
+            if isBlinking {
+                // Starting a fresh alert cycle: keep chiming every 5s until it
+                // ends. The very first chime is deliberately NOT played here —
+                // newBeaconHandler already played it synchronously inside
+                // AttentionService.refresh(), which always runs before this
+                // polling-driven pulse() notices the isBlinking flip. Playing
+                // again here would double-chime the first beacon of the cycle.
+                soundTimer?.invalidate()
+                soundTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
+                    Task { @MainActor in self?.playSound() }
+                }
+            } else {
+                soundTimer?.invalidate()
+                soundTimer = nil
+            }
         }
 
         guard isBlinking else {
@@ -163,10 +181,14 @@ public final class OdometerAppDelegate: NSObject, NSApplicationDelegate {
         togglePopover()
     }
 
-    /// Deliberately does not use `statusItem.menu` directly: setting that
-    /// unconditionally would make AppKit show the menu on *every* click,
-    /// left or right, and swallow the left-click behaviour above. Instead
-    /// the menu is attached only for the duration of this right-click.
+    /// Pops the menu up directly via `NSMenu.popUp`, rather than assigning it
+    /// to `statusItem.menu` and simulating a click: this method already runs
+    /// from inside `statusItemClicked`'s event handling, so a synchronous
+    /// `performClick(nil)` there does not present anything, and immediately
+    /// clearing `statusItem.menu` right after tears down whatever might have
+    /// appeared. `statusItem.menu` is deliberately left untouched entirely:
+    /// setting it unconditionally would make AppKit show the menu on *every*
+    /// click, left or right, and swallow the left-click behaviour above.
     private func showStatusMenu() {
         let menu = NSMenu()
         menu.addItem(withTitle: "Настройки…", action: #selector(openSettingsFromMenu), keyEquivalent: "")
@@ -175,9 +197,11 @@ public final class OdometerAppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(withTitle: "Выйти", action: #selector(quit), keyEquivalent: "")
             .target = self
 
-        statusItem.menu = menu
-        statusItem.button?.performClick(nil)
-        statusItem.menu = nil
+        if let button = statusItem.button {
+            menu.popUp(positioning: nil,
+                       at: NSPoint(x: 0, y: button.bounds.height + 4),
+                       in: button)
+        }
     }
 
     @objc private func openSettingsFromMenu() {
