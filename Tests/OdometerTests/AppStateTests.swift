@@ -98,7 +98,7 @@ private actor ResultBox {
         let state = try makeState(provider: SequenceUsageProvider(box: box))
 
         await state.refreshUsage(now: now)
-        #expect(state.nextRefreshDelay == 120)
+        #expect(state.nextRefreshDelay == 60)
 
         await state.refreshUsage(now: now.addingTimeInterval(120))
         #expect(state.nextRefreshDelay == 60)

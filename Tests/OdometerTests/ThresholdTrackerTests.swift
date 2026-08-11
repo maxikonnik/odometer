@@ -52,4 +52,26 @@ import Testing
         tracker.thresholds = [50, 80]
         #expect(tracker.newlyCrossed(limit(90)) == [50, 80])
     }
+
+    @Test func droppingBelowThresholdRearmsIt() {
+        var tracker = ThresholdTracker(thresholds: [80, 95])
+        #expect(tracker.newlyCrossed(limit(81)) == [80])
+        #expect(tracker.newlyCrossed(limit(70)) == [])
+        #expect(tracker.newlyCrossed(limit(85)) == [80])
+    }
+
+    @Test func nilResetsAtLimitRearmsOnDropAndRecrosses() {
+        func nilResetLimit(_ percent: Double) -> UsageLimit {
+            UsageLimit(kind: .session, label: "L", percent: percent, resetsAt: nil, isActive: true)
+        }
+        var tracker = ThresholdTracker(thresholds: [80, 95])
+
+        #expect(tracker.newlyCrossed(nilResetLimit(96)) == [80, 95])
+        #expect(tracker.newlyCrossed(nilResetLimit(96)) == [])
+
+        // Rolling window resets without ever reporting a new resetsAt.
+        #expect(tracker.newlyCrossed(nilResetLimit(10)) == [])
+
+        #expect(tracker.newlyCrossed(nilResetLimit(96)) == [80, 95])
+    }
 }

@@ -53,7 +53,7 @@ def main() -> int:
         with open(tmp, "w", encoding="utf-8") as handle:
             json.dump(beacon, handle)
         os.replace(tmp, path)
-    except OSError:
+    except Exception:
         pass
     return 0
 

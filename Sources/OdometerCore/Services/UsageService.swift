@@ -18,7 +18,8 @@ public struct Backoff: Sendable {
     public mutating func recordFailure() { failureCount += 1 }
 
     public var delay: TimeInterval {
-        Self.steps[min(failureCount, Self.steps.count - 1)]
+        guard failureCount > 0 else { return Self.steps[0] }
+        return Self.steps[min(failureCount - 1, Self.steps.count - 1)]
     }
 }
 

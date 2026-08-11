@@ -225,7 +225,7 @@ import Testing
 
         let stats = try makeService().refresh(now: today)
         #expect(stats.hasUnpricedModel)
-        #expect(abs((stats.estimatedCostUSD ?? 0) - 0) < 0.0001)
+        #expect(stats.estimatedCostUSD == nil)
         #expect(stats.byModel["mystery-model"] == TokenCounts(input: 1_000_000))
     }
 

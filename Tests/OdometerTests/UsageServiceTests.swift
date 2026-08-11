@@ -18,6 +18,8 @@ private struct FailingCredentials: CredentialsProviding {
         var backoff = Backoff()
         #expect(backoff.delay == 60)
         backoff.recordFailure()
+        #expect(backoff.delay == 60)
+        backoff.recordFailure()
         #expect(backoff.delay == 120)
         backoff.recordFailure()
         #expect(backoff.delay == 300)

@@ -58,7 +58,9 @@ public struct GaugeView: View {
             lineWidth: 1.5
         )
 
-        // Zone arcs: green to 60%, amber to 80%, red to 100%.
+        // Zone arcs: green to 60%, amber to 80%, red to 100%. In the no-data
+        // state (percent == nil) every zone is drawn in the same secondary
+        // grey instead, so an unreachable dial doesn't imply full-scale data.
         for (from, to, zone) in [(0.0, 60.0, GaugeZone.normal),
                                  (60.0, 80.0, .warning),
                                  (80.0, 100.0, .critical)] {
@@ -72,7 +74,7 @@ public struct GaugeView: View {
             )
             context.stroke(
                 path,
-                with: .color(palette.color(for: zone)),
+                with: .color(percent == nil ? palette.secondaryText : palette.color(for: zone)),
                 style: StrokeStyle(lineWidth: lineWidth, lineCap: .round)
             )
         }

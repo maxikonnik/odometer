@@ -20,7 +20,14 @@ public struct ThresholdTracker: Sendable {
         }
         windows[limit.kind] = limit.resetsAt
 
-        var alreadyFired = fired[limit.kind] ?? []
+        // Falling back below an already-fired threshold re-arms it. This is
+        // what actually re-arms limits whose resetsAt is permanently nil
+        // (UsageDecoder.swift can produce those): the window-change check
+        // above can never distinguish a still-nil value from a new window,
+        // but a rolling window that resets also drops the percentage, which
+        // this catches regardless of resetsAt.
+        var alreadyFired = (fired[limit.kind] ?? []).filter { limit.percent >= $0 }
+
         let crossed = thresholds
             .sorted()
             .filter { limit.percent >= $0 && !alreadyFired.contains($0) }

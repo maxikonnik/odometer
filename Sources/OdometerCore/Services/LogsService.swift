@@ -66,15 +66,17 @@ public final class LogsService {
         stats.byProject = cache.byProject
 
         var cost = 0.0
+        var pricedModelContributed = false
         for (model, counts) in cache.byModel {
             stats.total += counts
             if let modelCost = Pricing.cost(of: counts, model: model) {
                 cost += modelCost
+                pricedModelContributed = true
             } else {
                 stats.hasUnpricedModel = true
             }
         }
-        stats.estimatedCostUSD = cache.byModel.isEmpty ? nil : cost
+        stats.estimatedCostUSD = pricedModelContributed ? cost : nil
         return stats
     }
 

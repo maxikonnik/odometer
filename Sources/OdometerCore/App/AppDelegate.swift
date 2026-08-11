@@ -11,6 +11,7 @@ public final class OdometerAppDelegate: NSObject, NSApplicationDelegate {
     private var logsTimer: Timer?
     private var blinkTimer: Timer?
     private var blinkOn = true
+    private var wasBlinking = false
 
     public override init() { super.init() }
 
@@ -34,7 +35,10 @@ public final class OdometerAppDelegate: NSObject, NSApplicationDelegate {
             settings: Settings()
         )
 
-        state.attention.newBeaconHandler = { [weak self] _ in self?.playSound() }
+        state.attention.newBeaconHandler = { [weak self] _ in
+            self?.playSound()
+            self?.redraw()
+        }
         state.attention.start()
 
         buildStatusItem()
@@ -42,12 +46,19 @@ public final class OdometerAppDelegate: NSObject, NSApplicationDelegate {
         startTimers()
         applyLaunchAtLogin()
 
+        // Deliberately after buildStatusItem(): the first Keychain read
+        // blocks on the macOS approval prompt, and doing it on the launch
+        // path left the app with no menu bar icon at all until the user
+        // found and answered that dialog. Task.detached (not a plain Task,
+        // which would inherit this method's MainActor isolation) is what
+        // actually keeps the synchronous Keychain call off the main thread.
+        let launchState = state!
+        Task.detached {
+            let badge = try? credentials.credentials().planBadge
+            await MainActor.run { launchState.setPlanBadge(badge) }
+        }
+
         Task {
-            // Deliberately after buildStatusItem(): the first Keychain read
-            // blocks on the macOS approval prompt, and doing it on the launch
-            // path left the app with no menu bar icon at all until the user
-            // found and answered that dialog.
-            state.setPlanBadge(try? credentials.credentials().planBadge)
             await state.notifier.requestAuthorization()
             await state.refreshUsage(now: Date())
             state.refreshLogs(now: Date())
@@ -66,6 +77,7 @@ public final class OdometerAppDelegate: NSObject, NSApplicationDelegate {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         statusItem.button?.target = self
         statusItem.button?.action = #selector(statusItemClicked)
+        statusItem.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
         redraw()
     }
 
@@ -103,7 +115,13 @@ public final class OdometerAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func pulse() {
-        guard state.attention.isBlinking else {
+        let isBlinking = state.attention.isBlinking
+        if isBlinking != wasBlinking {
+            wasBlinking = isBlinking
+            redraw()
+        }
+
+        guard isBlinking else {
             if !blinkOn {
                 blinkOn = true
                 statusItem.button?.alphaValue = 1
@@ -133,12 +151,41 @@ public final class OdometerAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func statusItemClicked() {
+        if NSApp.currentEvent?.type == .rightMouseUp {
+            showStatusMenu()
+            return
+        }
         if state.attention.isBlinking {
             activateOriginatingTerminal()
             state.attention.clear()
             redraw()
         }
         togglePopover()
+    }
+
+    /// Deliberately does not use `statusItem.menu` directly: setting that
+    /// unconditionally would make AppKit show the menu on *every* click,
+    /// left or right, and swallow the left-click behaviour above. Instead
+    /// the menu is attached only for the duration of this right-click.
+    private func showStatusMenu() {
+        let menu = NSMenu()
+        menu.addItem(withTitle: "Настройки…", action: #selector(openSettingsFromMenu), keyEquivalent: "")
+            .target = self
+        menu.addItem(.separator())
+        menu.addItem(withTitle: "Выйти", action: #selector(quit), keyEquivalent: "")
+            .target = self
+
+        statusItem.menu = menu
+        statusItem.button?.performClick(nil)
+        statusItem.menu = nil
+    }
+
+    @objc private func openSettingsFromMenu() {
+        togglePopover()
+    }
+
+    @objc private func quit() {
+        NSApplication.shared.terminate(nil)
     }
 
     /// Brings the terminal that asked for a decision to the front. If the
@@ -169,6 +216,7 @@ public final class OdometerAppDelegate: NSObject, NSApplicationDelegate {
         if popover.isShown {
             popover.performClose(nil)
         } else {
+            state.refreshLogs(now: Date())
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
             popover.contentViewController?.view.window?.makeKey()
         }
