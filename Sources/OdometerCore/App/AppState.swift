@@ -70,6 +70,12 @@ public final class AppState {
         }
     }
 
+    /// Set after launch: reading it from the Keychain can block on the system
+    /// approval prompt, which must never sit in front of the status item.
+    public func setPlanBadge(_ badge: String?) {
+        planBadge = badge
+    }
+
     public func menuBarPercent() -> Double? {
         snapshot?.limit(settings.menuBarLimit)?.percent
     }

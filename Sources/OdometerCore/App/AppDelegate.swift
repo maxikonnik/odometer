@@ -31,8 +31,7 @@ public final class OdometerAppDelegate: NSObject, NSApplicationDelegate {
             attention: AttentionService(
                 store: AttentionStore(directory: dataDirectory.appendingPathComponent("attention"))
             ),
-            settings: Settings(),
-            planBadge: try? credentials.credentials().planBadge
+            settings: Settings()
         )
 
         state.attention.newBeaconHandler = { [weak self] _ in self?.playSound() }
@@ -44,6 +43,11 @@ public final class OdometerAppDelegate: NSObject, NSApplicationDelegate {
         applyLaunchAtLogin()
 
         Task {
+            // Deliberately after buildStatusItem(): the first Keychain read
+            // blocks on the macOS approval prompt, and doing it on the launch
+            // path left the app with no menu bar icon at all until the user
+            // found and answered that dialog.
+            state.setPlanBadge(try? credentials.credentials().planBadge)
             await state.notifier.requestAuthorization()
             await state.refreshUsage(now: Date())
             state.refreshLogs(now: Date())
