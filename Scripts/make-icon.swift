@@ -336,6 +336,11 @@ struct SeededRNG {
         let factor = 1 + fraction * (2 * t - 1)
         return base * factor
     }
+
+    /// Uniform in [low, high).
+    mutating func uniform(_ low: CGFloat, _ high: CGFloat) -> CGFloat {
+        low + CGFloat(nextUnit()) * (high - low)
+    }
 }
 
 /// A wedge that *widens* from hub to tip (the inverse taper of `drawSpoke`):
@@ -412,6 +417,58 @@ func drawVariant6(_ ctx: CGContext, seed: UInt64) {
     drawPlainHub(ctx, radius: 24)
 }
 
+/// Variant 7 - "Органика, сильнее": same construction as V6 (widen-toward-
+/// tip taper, +/-30% distance jitter, deterministic seeded PRNG, exempt
+/// needle), but with much stronger size variation. The ceiling is fixed,
+/// not re-derived per seed: it is the exact ball diameter of the thickest
+/// petal that V6 seed 2 happens to land on (k=2, ballDiameter ~=
+/// 42.7423 design units - replay the V6 RNG sequence for seed 2 to verify).
+/// Every petal's ball diameter (and, since thickness tracks diameter
+/// exactly as in V6, its spoke width too) is then drawn independently and
+/// uniformly from 0.30x-1.00x of that fixed ceiling, i.e. up to 70% smaller
+/// than the biggest petal ever seen.
+let v7MaxBallDiameter: CGFloat = 42.742318447238375
+
+func drawVariant7(_ ctx: CGContext, seed: UInt64) {
+    drawPlate(ctx)
+    drawDialFace(ctx)
+    drawZoneArc(ctx)
+    drawTicks(ctx)
+
+    var rng = SeededRNG(seed: seed)
+    let baseRadius = ballSpecs["5b"]!.spokeLength // 92: same distance base as V6
+
+    let count = 8
+    let step = 360.0 / Double(count)
+    for k in 0..<count {
+        let angle = NEEDLE_ANGLE + Double(k) * step
+        if k == 0 {
+            // The needle: fixed, pointed, no ball, no jitter.
+            drawSpoke(ctx, angleDegrees: angle, innerR: 10, outerR: DIAL_RADIUS * 0.72, baseHalfWidth: 16, color: burstColor)
+            continue
+        }
+        let radius = rng.jitter(baseRadius, fraction: 0.30)
+        let sizeFactor = rng.uniform(0.30, 1.00)
+        let ballDiameter = v7MaxBallDiameter * sizeFactor
+        let ballRadius = ballDiameter / 2
+        // Thickness tracks diameter exactly as in V6 - both derive from the
+        // same per-petal sizeFactor, so a thin petal never carries a big
+        // ball or vice versa.
+        let tipHalfWidth = ballRadius
+        let hubHalfWidth = tipHalfWidth * 0.375
+        drawWideningSpoke(ctx, angleDegrees: angle, innerR: 8, outerR: radius, hubHalfWidth: hubHalfWidth, tipHalfWidth: tipHalfWidth, color: burstColor)
+
+        let rad = CGFloat(angle * .pi / 180)
+        let tip = CGPoint(x: CENTER.x + cos(rad) * radius, y: CENTER.y + sin(rad) * radius)
+        let ballRect = CGRect(x: tip.x - ballRadius, y: tip.y - ballRadius, width: ballRadius * 2, height: ballRadius * 2)
+        ctx.beginPath()
+        ctx.setFillColor(burstColor)
+        ctx.fillEllipse(in: ballRect)
+    }
+
+    drawPlainHub(ctx, radius: 24)
+}
+
 func drawVariant(_ key: String, _ ctx: CGContext, seed: UInt64 = 0) {
     if let spec = ballSpecs[key] {
         drawVariant5(ctx, spec: spec)
@@ -423,6 +480,7 @@ func drawVariant(_ key: String, _ ctx: CGContext, seed: UInt64 = 0) {
     case "3": drawVariant3(ctx)
     case "4": drawVariant4(ctx)
     case "6": drawVariant6(ctx, seed: seed)
+    case "7": drawVariant7(ctx, seed: seed)
     default: fatalError("unknown variant \(key)")
     }
 }
@@ -472,7 +530,8 @@ func savePNG(_ image: CGImage, to path: String) {
 
 // MARK: - Entry point
 
-let validVariants: Set<String> = ["1", "2", "3", "4", "5a", "5b", "5c", "6"]
+let validVariants: Set<String> = ["1", "2", "3", "4", "5a", "5b", "5c", "6", "7"]
+let seededVariants: Set<String> = ["6", "7"]
 
 let args = CommandLine.arguments
 func usage() -> Never {
@@ -480,8 +539,8 @@ func usage() -> Never {
     Usage:
       make-icon <variant 1-4|5a|5b|5c> <pixelSize> <outputPNGPath>
       make-icon <variant 1-4|5a|5b|5c> iconset <outputIconsetDir>
-      make-icon 6 <pixelSize> <outputPNGPath> <seed>
-      make-icon 6 iconset <outputIconsetDir> <seed>
+      make-icon <6|7> <pixelSize> <outputPNGPath> <seed>
+      make-icon <6|7> iconset <outputIconsetDir> <seed>
     """)
     exit(1)
 }
@@ -490,9 +549,9 @@ guard args.count >= 4, validVariants.contains(args[1]) else { usage() }
 let variant = args[1]
 
 var seed: UInt64 = 0
-if variant == "6" {
+if seededVariants.contains(variant) {
     guard args.count >= 5, let parsedSeed = UInt64(args[4]) else {
-        print("error: variant 6 requires an integer seed as the last argument")
+        print("error: variant \(variant) requires an integer seed as the last argument")
         exit(1)
     }
     seed = parsedSeed
