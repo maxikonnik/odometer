@@ -210,8 +210,17 @@ public final class OdometerAppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// Unlike `togglePopover()`, this never closes an already-open popover:
+    /// the user just asked for settings, and toggling it shut here would hide
+    /// the sheet `requestSettings()` is about to raise.
     @objc private func openSettingsFromMenu() {
-        togglePopover()
+        state.requestSettings()
+        guard let button = statusItem.button else { return }
+        if !popover.isShown {
+            state.refreshLogs(now: Date())
+            popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+            popover.contentViewController?.view.window?.makeKey()
+        }
     }
 
     @objc private func quit() {

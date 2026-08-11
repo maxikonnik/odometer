@@ -32,6 +32,7 @@ public struct DashboardView: View {
             )
         )
         .onReceive(timer) { tick = $0 }
+        .onChange(of: state.settingsRequest) { showSettings = true }
         .sheet(isPresented: $showSettings) {
             SettingsView(state: state)
         }

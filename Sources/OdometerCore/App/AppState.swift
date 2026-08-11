@@ -20,6 +20,10 @@ public final class AppState {
     public let settings: Settings
     public let notifier: ThresholdNotifier
 
+    /// Set by the status-item menu to ask the dashboard to present its settings
+    /// sheet; the dashboard clears it once the sheet is up.
+    public var settingsRequest = 0
+
     /// Seconds until the next poll; grows while the endpoint is failing.
     public var nextRefreshDelay: TimeInterval { backoff.delay }
 
@@ -74,6 +78,13 @@ public final class AppState {
     /// approval prompt, which must never sit in front of the status item.
     public func setPlanBadge(_ badge: String?) {
         planBadge = badge
+    }
+
+    /// Asks the dashboard to present its settings sheet. A monotonically
+    /// increasing counter, rather than a Bool, so two consecutive requests
+    /// both register even if the sheet was dismissed in between.
+    public func requestSettings() {
+        settingsRequest += 1
     }
 
     public func menuBarPercent() -> Double? {
