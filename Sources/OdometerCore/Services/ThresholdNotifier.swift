@@ -11,7 +11,14 @@ public final class ThresholdNotifier {
 
     @ObservationIgnored private let settings: Settings
     @ObservationIgnored private var tracker = ThresholdTracker()
-    @ObservationIgnored private let center = UNUserNotificationCenter.current()
+    /// Resolved on use, never at init: `UNUserNotificationCenter.current()`
+    /// raises `bundleProxyForCurrentProcess is nil` and aborts the process when
+    /// there is no app bundle, which is exactly how `swift test` runs. Deferring
+    /// it keeps the notifier constructible in tests, where the authorization
+    /// gate means it is never actually touched.
+    @ObservationIgnored private var center: UNUserNotificationCenter {
+        UNUserNotificationCenter.current()
+    }
 
     public init(settings: Settings) {
         self.settings = settings
