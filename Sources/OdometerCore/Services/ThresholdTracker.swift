@@ -3,6 +3,12 @@ import Foundation
 /// Remembers which notification thresholds have already fired for each limit,
 /// so a threshold announces itself at most once per limit window.
 public struct ThresholdTracker: Sendable {
+    /// Hysteresis margin (percentage points) below a threshold for re-arming.
+    /// Server percentages are whole numbers; without margin, oscillation around
+    /// a boundary (e.g., 81 → 79 → 81) would re-fire the threshold on every
+    /// up-crossing, spamming the user when they're near a limit.
+    public static let rearmMargin: Double = 5
+
     public var thresholds: [Double] {
         didSet { if thresholds != oldValue { fired = [:] } }
     }
@@ -26,7 +32,7 @@ public struct ThresholdTracker: Sendable {
         // above can never distinguish a still-nil value from a new window,
         // but a rolling window that resets also drops the percentage, which
         // this catches regardless of resetsAt.
-        var alreadyFired = (fired[limit.kind] ?? []).filter { limit.percent >= $0 }
+        var alreadyFired = (fired[limit.kind] ?? []).filter { limit.percent >= $0 - Self.rearmMargin }
 
         let crossed = thresholds
             .sorted()
