@@ -34,6 +34,7 @@ cat > "$CONTENTS/Info.plist" <<PLIST
     <key>CFBundleVersion</key><string>$VERSION</string>
     <key>LSMinimumSystemVersion</key><string>14.0</string>
     <key>LSUIElement</key><true/>
+    <key>NSAppleEventsUsageDescription</key><string>Odometer выводит вперёд окно терминала, который ждёт вашего решения.</string>
     <key>NSHumanReadableCopyright</key><string>Odometer</string>
 </dict>
 </plist>

@@ -184,9 +184,12 @@ public final class OdometerAppDelegate: NSObject, NSApplicationDelegate {
         // showing the popover makes Odometer the active app and pulls focus
         // straight back off the terminal we just raised.
         if state.attention.isBlinking {
+            // Read the terminal BEFORE clearing: the lookup lives in the beacon,
+            // and clearing first leaves nothing to look up.
+            let terminal = state.attention.beacons.last?.termProgram
             state.attention.clear()
             redraw()
-            activateOriginatingTerminal()
+            activate(terminal: terminal)
             return
         }
         togglePopover()
@@ -243,8 +246,8 @@ public final class OdometerAppDelegate: NSObject, NSApplicationDelegate {
     /// ignored. `openApplication` on an already-running app activates it
     /// rather than launching a second copy — it's the same path `open -a`
     /// uses.
-    private func activateOriginatingTerminal() {
-        guard let program = state.attention.beacons.last?.termProgram,
+    private func activate(terminal program: String?) {
+        guard let program,
               let bundleId = Self.bundleIdentifier(forTermProgram: program),
               let app = NSRunningApplication.runningApplications(withBundleIdentifier: bundleId).first,
               let url = app.bundleURL
@@ -252,7 +255,31 @@ public final class OdometerAppDelegate: NSObject, NSApplicationDelegate {
 
         let configuration = NSWorkspace.OpenConfiguration()
         configuration.activates = true
-        NSWorkspace.shared.openApplication(at: url, configuration: configuration)
+        NSWorkspace.shared.openApplication(at: url, configuration: configuration) { _, _ in
+            Self.deminiaturizeWindows(ofBundleId: bundleId)
+        }
+    }
+
+    /// Activating an app does not bring its minimized windows back out of the
+    /// Dock, so a user whose terminal was minimized sees nothing happen. Only
+    /// scripting can un-minimize another app's windows; this is best-effort and
+    /// silent, because it needs Automation permission the user may not grant.
+    private static func deminiaturizeWindows(ofBundleId bundleId: String) {
+        let source = """
+        tell application id "\(bundleId)"
+            activate
+            try
+                set miniaturized of every window to false
+            end try
+        end tell
+        """
+        DispatchQueue.global(qos: .userInitiated).async {
+            var error: NSDictionary?
+            NSAppleScript(source: source)?.executeAndReturnError(&error)
+            if let error {
+                Diagnostics.log("deminiaturize failed for \(bundleId): \(error)")
+            }
+        }
     }
 
     static func bundleIdentifier(forTermProgram program: String) -> String? {
