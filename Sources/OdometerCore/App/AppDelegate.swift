@@ -40,10 +40,12 @@ public final class OdometerAppDelegate: NSObject, NSApplicationDelegate {
             self?.playSound()
             self?.redraw()
         }
-        state.attention.start()
-
         buildStatusItem()
         buildPopover()
+
+        // After the status item exists: start() refreshes immediately, and a
+        // beacon still on disk from a previous session must be able to paint.
+        state.attention.start()
         startTimers()
         applyLaunchAtLogin()
 
@@ -154,6 +156,10 @@ public final class OdometerAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func redraw() {
+        // Callable before buildStatusItem(): AttentionService.start() performs an
+        // immediate refresh, and a beacon left over from a previous session fires
+        // newBeaconHandler -> redraw() while statusItem is still nil.
+        guard statusItem != nil else { return }
         let percent = state.menuBarPercent()
         statusItem.button?.image = MenuBarIconRenderer.image(
             percent: percent,
