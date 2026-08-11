@@ -35,23 +35,26 @@ def main() -> int:
             pass
         return 0
 
-    os.makedirs(directory, exist_ok=True)
-    created = (
-        datetime.datetime.now(datetime.timezone.utc)
-        .replace(microsecond=0)
-        .isoformat()
-        .replace("+00:00", "Z")
-    )
-    beacon = {
-        "sessionId": session_id,
-        "cwd": payload.get("cwd", ""),
-        "termProgram": os.environ.get("TERM_PROGRAM"),
-        "createdAt": created,
-    }
-    tmp = path + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as handle:
-        json.dump(beacon, handle)
-    os.replace(tmp, path)
+    try:
+        os.makedirs(directory, exist_ok=True)
+        created = (
+            datetime.datetime.now(datetime.timezone.utc)
+            .replace(microsecond=0)
+            .isoformat()
+            .replace("+00:00", "Z")
+        )
+        beacon = {
+            "sessionId": session_id,
+            "cwd": payload.get("cwd", ""),
+            "termProgram": os.environ.get("TERM_PROGRAM"),
+            "createdAt": created,
+        }
+        tmp = path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as handle:
+            json.dump(beacon, handle)
+        os.replace(tmp, path)
+    except OSError:
+        pass
     return 0
 
 

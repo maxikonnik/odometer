@@ -50,8 +50,10 @@ for event, command in wanted.items():
 # safety net destroyed itself exactly when it was needed.
 backup = settings_path + ".odometer-backup"
 if os.path.exists(settings_path) and not os.path.exists(backup):
-    with open(settings_path, encoding="utf-8") as src, open(backup, "w", encoding="utf-8") as dst:
+    backup_tmp = backup + ".tmp"
+    with open(settings_path, encoding="utf-8") as src, open(backup_tmp, "w", encoding="utf-8") as dst:
         dst.write(src.read())
+    os.replace(backup_tmp, backup)
 
 os.makedirs(os.path.dirname(settings_path), exist_ok=True)
 tmp = settings_path + ".tmp"
