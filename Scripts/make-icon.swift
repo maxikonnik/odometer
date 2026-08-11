@@ -310,7 +310,109 @@ func drawVariant5(_ ctx: CGContext, spec: BallSpec) {
     drawPlainHub(ctx, radius: 24)
 }
 
-func drawVariant(_ key: String, _ ctx: CGContext) {
+/// A deterministic PRNG (splitmix64) - never `Double.random(in:)` or
+/// `SystemRandomNumberGenerator`, so a given seed always renders the exact
+/// same icon and the committed .icns stays reproducible from source.
+struct SeededRNG {
+    private var state: UInt64
+    init(seed: UInt64) { self.state = seed }
+
+    mutating func nextUInt64() -> UInt64 {
+        state = state &+ 0x9E37_79B9_7F4A_7C15
+        var z = state
+        z = (z ^ (z >> 30)) &* 0xBF58_476D_1CE4_E5B9
+        z = (z ^ (z >> 27)) &* 0x94D0_49BB_1331_11EB
+        return z ^ (z >> 31)
+    }
+
+    /// Uniform in [0, 1).
+    mutating func nextUnit() -> Double {
+        Double(nextUInt64() >> 11) * (1.0 / 9_007_199_254_740_992.0) // / 2^53
+    }
+
+    /// Uniform in [base * (1 - fraction), base * (1 + fraction)].
+    mutating func jitter(_ base: CGFloat, fraction: CGFloat) -> CGFloat {
+        let t = CGFloat(nextUnit())
+        let factor = 1 + fraction * (2 * t - 1)
+        return base * factor
+    }
+}
+
+/// A wedge that *widens* from hub to tip (the inverse taper of `drawSpoke`):
+/// narrow where it meets the hub, growing out toward the tip so it reads as
+/// organic growth rather than a pin stuck onto a stick.
+func drawWideningSpoke(_ ctx: CGContext, angleDegrees: Double, innerR: CGFloat, outerR: CGFloat, hubHalfWidth: CGFloat, tipHalfWidth: CGFloat, color: CGColor) {
+    let rad = CGFloat(angleDegrees * .pi / 180)
+    let dir = CGPoint(x: cos(rad), y: sin(rad))
+    let perp = CGPoint(x: -sin(rad), y: cos(rad))
+    let hubCenter = CGPoint(x: CENTER.x + dir.x * innerR, y: CENTER.y + dir.y * innerR)
+    let tipCenter = CGPoint(x: CENTER.x + dir.x * outerR, y: CENTER.y + dir.y * outerR)
+    let hubLeft = CGPoint(x: hubCenter.x + perp.x * hubHalfWidth, y: hubCenter.y + perp.y * hubHalfWidth)
+    let hubRight = CGPoint(x: hubCenter.x - perp.x * hubHalfWidth, y: hubCenter.y - perp.y * hubHalfWidth)
+    let tipLeft = CGPoint(x: tipCenter.x + perp.x * tipHalfWidth, y: tipCenter.y + perp.y * tipHalfWidth)
+    let tipRight = CGPoint(x: tipCenter.x - perp.x * tipHalfWidth, y: tipCenter.y - perp.y * tipHalfWidth)
+
+    ctx.beginPath()
+    ctx.move(to: hubLeft)
+    ctx.addLine(to: tipLeft)
+    ctx.addLine(to: tipRight)
+    ctx.addLine(to: hubRight)
+    ctx.closePath()
+    ctx.setFillColor(color)
+    ctx.fillPath()
+}
+
+/// Variant 6 - "Органика": based on V5b (medium balls). Spokes invert the
+/// V5 taper - narrow at the hub, widening toward the tip - so they read as
+/// wedges growing out of the centre. Each of the 7 non-needle balls jitters
+/// independently in size (+/-20% of the V5b base diameter) and in distance
+/// from the hub (+/-30% of the V5b base radius); the spoke is redrawn to
+/// whatever length its own jittered ball landed at, so it always meets the
+/// ball with no gap and no overshoot. The needle spoke is exempt from all
+/// of it: fixed length, fixed width, pointed, no ball, no jitter - the one
+/// deliberately regular element in an otherwise hand-thrown burst.
+func drawVariant6(_ ctx: CGContext, seed: UInt64) {
+    drawPlate(ctx)
+    drawDialFace(ctx)
+    drawZoneArc(ctx)
+    drawTicks(ctx)
+
+    var rng = SeededRNG(seed: seed)
+    let base = ballSpecs["5b"]! // medium base: spokeLength 92, ballRatio 0.42
+    let baseRadius = base.spokeLength
+    let baseBallDiameter = base.spokeLength * base.ballRatio
+
+    let count = 8
+    let step = 360.0 / Double(count)
+    for k in 0..<count {
+        let angle = NEEDLE_ANGLE + Double(k) * step
+        if k == 0 {
+            // The needle: fixed, pointed, no ball, no jitter.
+            drawSpoke(ctx, angleDegrees: angle, innerR: 10, outerR: DIAL_RADIUS * 0.72, baseHalfWidth: 16, color: burstColor)
+            continue
+        }
+        let radius = rng.jitter(baseRadius, fraction: 0.30)
+        let ballDiameter = rng.jitter(baseBallDiameter, fraction: 0.20)
+        let ballRadius = ballDiameter / 2
+        // The tip is exactly as wide as the ball it grows into, and the hub
+        // end is 35-40% of that - "roughly 35-40% of the tip width at the
+        // hub end."
+        let tipHalfWidth = ballRadius
+        let hubHalfWidth = tipHalfWidth * 0.375
+        drawWideningSpoke(ctx, angleDegrees: angle, innerR: 8, outerR: radius, hubHalfWidth: hubHalfWidth, tipHalfWidth: tipHalfWidth, color: burstColor)
+
+        let rad = CGFloat(angle * .pi / 180)
+        let tip = CGPoint(x: CENTER.x + cos(rad) * radius, y: CENTER.y + sin(rad) * radius)
+        let ballRect = CGRect(x: tip.x - ballRadius, y: tip.y - ballRadius, width: ballRadius * 2, height: ballRadius * 2)
+        ctx.beginPath()
+        ctx.setFillColor(burstColor)
+        ctx.fillEllipse(in: ballRect)
+    }
+
+    drawPlainHub(ctx, radius: 24)
+}
+
+func drawVariant(_ key: String, _ ctx: CGContext, seed: UInt64 = 0) {
     if let spec = ballSpecs[key] {
         drawVariant5(ctx, spec: spec)
         return
@@ -320,13 +422,14 @@ func drawVariant(_ key: String, _ ctx: CGContext) {
     case "2": drawVariant2(ctx)
     case "3": drawVariant3(ctx)
     case "4": drawVariant4(ctx)
+    case "6": drawVariant6(ctx, seed: seed)
     default: fatalError("unknown variant \(key)")
     }
 }
 
 // MARK: - Rendering
 
-func renderImage(variant: String, pixelSize: Int) -> CGImage {
+func renderImage(variant: String, pixelSize: Int, seed: UInt64 = 0) -> CGImage {
     let colorSpace = CGColorSpaceCreateDeviceRGB()
     guard let ctx = CGContext(
         data: nil,
@@ -350,7 +453,7 @@ func renderImage(variant: String, pixelSize: Int) -> CGImage {
     let scale = CGFloat(pixelSize) / CANVAS
     ctx.scaleBy(x: scale, y: scale)
 
-    drawVariant(variant, ctx)
+    drawVariant(variant, ctx, seed: seed)
 
     guard let image = ctx.makeImage() else { fatalError("Could not rasterize image") }
     return image
@@ -369,7 +472,7 @@ func savePNG(_ image: CGImage, to path: String) {
 
 // MARK: - Entry point
 
-let validVariants: Set<String> = ["1", "2", "3", "4", "5a", "5b", "5c"]
+let validVariants: Set<String> = ["1", "2", "3", "4", "5a", "5b", "5c", "6"]
 
 let args = CommandLine.arguments
 func usage() -> Never {
@@ -377,12 +480,24 @@ func usage() -> Never {
     Usage:
       make-icon <variant 1-4|5a|5b|5c> <pixelSize> <outputPNGPath>
       make-icon <variant 1-4|5a|5b|5c> iconset <outputIconsetDir>
+      make-icon 6 <pixelSize> <outputPNGPath> <seed>
+      make-icon 6 iconset <outputIconsetDir> <seed>
     """)
     exit(1)
 }
 
 guard args.count >= 4, validVariants.contains(args[1]) else { usage() }
 let variant = args[1]
+
+var seed: UInt64 = 0
+if variant == "6" {
+    guard args.count >= 5, let parsedSeed = UInt64(args[4]) else {
+        print("error: variant 6 requires an integer seed as the last argument")
+        exit(1)
+    }
+    seed = parsedSeed
+    print("Using seed \(seed)")
+}
 
 if args[2] == "iconset" {
     let outDir = args[3]
@@ -395,12 +510,12 @@ if args[2] == "iconset" {
         ("icon_512x512", 512), ("icon_512x512@2x", 1024),
     ]
     for (name, size) in entries {
-        let img = renderImage(variant: variant, pixelSize: size)
+        let img = renderImage(variant: variant, pixelSize: size, seed: seed)
         savePNG(img, to: "\(outDir)/\(name).png")
         print("Wrote \(outDir)/\(name).png (\(size)x\(size))")
     }
 } else if let pixelSize = Int(args[2]) {
-    let img = renderImage(variant: variant, pixelSize: pixelSize)
+    let img = renderImage(variant: variant, pixelSize: pixelSize, seed: seed)
     savePNG(img, to: args[3])
     print("Wrote \(args[3]) (variant \(variant), \(pixelSize)px)")
 } else {
