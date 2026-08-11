@@ -179,10 +179,15 @@ public final class OdometerAppDelegate: NSObject, NSApplicationDelegate {
             showStatusMenu()
             return
         }
+        // While alerting, the click's whole job is to get the user to the
+        // terminal that is waiting. Opening the panel here would defeat that:
+        // showing the popover makes Odometer the active app and pulls focus
+        // straight back off the terminal we just raised.
         if state.attention.isBlinking {
-            activateOriginatingTerminal()
             state.attention.clear()
             redraw()
+            activateOriginatingTerminal()
+            return
         }
         togglePopover()
     }
