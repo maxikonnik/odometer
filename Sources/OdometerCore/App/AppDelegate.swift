@@ -229,13 +229,25 @@ public final class OdometerAppDelegate: NSObject, NSApplicationDelegate {
 
     /// Brings the terminal that asked for a decision to the front. If the
     /// beacon did not record a recognizable terminal, the panel simply opens.
+    ///
+    /// Deliberately goes through `NSWorkspace.openApplication`, not
+    /// `NSRunningApplication.activate`: Odometer is an `LSUIElement`
+    /// accessory app that is never frontmost when its status item is
+    /// clicked, and under macOS 14's cooperative activation rules a
+    /// background app's `activate` call on another app is routinely
+    /// ignored. `openApplication` on an already-running app activates it
+    /// rather than launching a second copy — it's the same path `open -a`
+    /// uses.
     private func activateOriginatingTerminal() {
         guard let program = state.attention.beacons.last?.termProgram,
-              let bundleId = Self.bundleIdentifier(forTermProgram: program)
+              let bundleId = Self.bundleIdentifier(forTermProgram: program),
+              let app = NSRunningApplication.runningApplications(withBundleIdentifier: bundleId).first,
+              let url = app.bundleURL
         else { return }
 
-        let apps = NSRunningApplication.runningApplications(withBundleIdentifier: bundleId)
-        apps.first?.activate(options: [.activateAllWindows])
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.activates = true
+        NSWorkspace.shared.openApplication(at: url, configuration: configuration)
     }
 
     static func bundleIdentifier(forTermProgram program: String) -> String? {
